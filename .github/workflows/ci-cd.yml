@@ -1,0 +1,50 @@
+name: ci-cd-for-ml
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+    inputs:
+      degrade:
+        description: "Train a deliberately bad model to demo the gate BLOCKING a deploy (Beat 2)"
+        type: boolean
+        default: false
+      eval_threshold:
+        description: "Minimum holdout accuracy required to pass the gate"
+        default: "0.80"
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    env:
+      EVAL_THRESHOLD: ${{ github.event.inputs.eval_threshold || '0.80' }}
+      DEGRADE: ${{ github.event.inputs.degrade == 'true' && '1' || '0' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install deps
+        run: pip install -r requirements.txt
+      - name: Unit tests
+        run: pytest -q
+      - name: Train model
+        run: python train.py
+      - name: "MODEL EVAL GATE — blocks the pipeline if accuracy < threshold"
+        run: python eval_gate.py
+      - name: Build container image
+        run: docker build -t fraud-api:${{ github.sha }} .
+      - name: Upload model artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: model
+          path: model.pkl
+
+  deploy:
+    needs: ci    
+    runs-on: ubuntu-latest
+    steps:
+      - name: Staged rollout (canary 10% -> 100%)
+        run: |
+          echo "Eval gate passed. Rolling out canary 10% -> 100% to Azure Container Apps."
+          echo "This is the staged rollout CrowdStrike skipped (content shipped to 100% at once)."

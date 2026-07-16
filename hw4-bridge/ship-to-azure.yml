@@ -1,0 +1,44 @@
+# OPTIONAL BONUS — automate HW4 Part 3 (ship to Azure Container Apps).
+#
+# The REQUIRED HW4 path is still running deploy_azure.sh in Azure Cloud Shell
+# (see AZURE-QUICKSTART.md in your HW4 kit). This workflow just runs that SAME
+# provided script automatically from GitHub Actions — turning "I deployed it by
+# hand" into "my repo deploys itself." Adding this is the kind of thing that
+# earns the bonus; it is NOT required to pass HW4.
+#
+# To use it:
+#   1. Copy this file into your HW4 repo at .github/workflows/ship-to-azure.yml
+#   2. One-time: create an Azure AD app + federated credential (OIDC) and add repo
+#      secrets AZURE_CLIENT_ID, AZURE_TENANT_ID, AZURE_SUBSCRIPTION_ID.
+#      (OIDC = no keys, which is why shared-key auth being blocked doesn't matter.)
+#   3. Actions tab -> "hw4-ship-to-azure" -> Run workflow.
+#   4. Remember HW4's cost rule: tear it down the same day (teardown_azure.sh).
+
+name: hw4-ship-to-azure
+
+on:
+  workflow_dispatch:
+
+permissions:
+  id-token: write      # required for OIDC az login
+  contents: read
+
+jobs:
+  ship:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Azure login (OIDC, no keys)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Run the provided HW4 Azure deploy
+        run: bash deploy_azure.sh    # your kit's script: imports the image -> Container Apps -> prints the public /predict URL
+
+      # Optional: capture the URL, then tear down the same day to stay at ~$0
+      # - name: Tear down (cost hygiene)
+      #   run: bash teardown_azure.sh
