@@ -1,58 +1,169 @@
-# Unit 11 Demo — CI/CD-for-ML with GitHub Actions
+# Project 2 – Real-Time Fraud Detection System
 
-A tiny, runnable **CI/CD pipeline for a model** you drop onto your HW4-style repo. It shows the
-one thing CrowdStrike was missing: **a gate that blocks a bad artifact from shipping.**
+## Overview
 
-The pipeline on every push:
+This project implements a real-time fraud detection system using FastAPI, Redis, Kafka, Docker, and Nginx. Transactions are processed through a streaming pipeline where customer features are stored in Redis and used by a fraud detection API to generate predictions. The system also demonstrates blue-green deployment and includes automated testing and performance benchmarking.
 
+---
+
+## Features
+
+- FastAPI REST API for fraud prediction
+- Single and batch prediction endpoints
+- Redis feature store with TTL support
+- Kafka-based transaction streaming
+- Docker containerization
+- Blue-green deployment with Nginx
+- Automated testing using pytest
+- Performance testing for latency and throughput
+
+---
+
+## Project Structure
+
+```text
+src/
+├── api/
+├── streaming/
+├── monitoring/
+├── models/
+tests/
+deployment/
+Dockerfile
+docker-compose.yml
+docker-compose.blue-green.yml
+requirements.txt
+README.md
 ```
-build image  →  pytest  →  MODEL EVAL GATE (accuracy ≥ threshold)  →  [deploy: canary → 100%]
-                                     │
-                        fails ──►  pipeline goes RED, deploy is BLOCKED
-```
 
-The **core demo runs entirely on GitHub-hosted runners at $0** — no Azure needed. The deploy job is
-an optional stub that reuses your Unit 10 Azure Container Apps floor (see the workflow comments).
+---
 
-## Run it locally first (dry-run before class)
+## Prerequisites
+
+Before running the project, install:
+
+- Python 3.11+
+- Docker Desktop
+- Git
+
+---
+
+## Setup
+
+Create the environment file and generate the seed dataset:
 
 ```bash
-pip install -r requirements.txt
-pytest -q                       # unit tests
-python train.py                 # trains model.pkl + writes metrics.json
-python eval_gate.py             # the gate: exits non-zero if accuracy < EVAL_THRESHOLD (default 0.80)
-docker build -t fraud-api .     # build the image
+cp .env.example .env
+python data/generate_seed.py
 ```
 
-## The three demo beats
+(Optional) Train the baseline model:
 
-- **Beat 1 — green run.** Push to `main` (or run the workflow). Everything passes; deploy step reports "gate passed."
-- **Beat 2 — the gate blocks a bad model.** Re-run the workflow with **`degrade = true`** (Actions → Run workflow),
-  or bump **`eval_threshold`** to `0.99`. `train.py` produces a deliberately weak model, `eval_gate.py` fails,
-  and **the deploy job never runs.** Say it out loud: *this is the Content Validator CrowdStrike didn't have.*
-- **Beat 3 — staged rollout.** Point at the `deploy` job: it only runs `needs: ci` (after the gate) and rolls out
-  **canary 10% → 100%** — the staged rollout CrowdStrike skipped. (Enable the real `az` steps if you want it live.)
+```bash
+python -m src.models.train
+```
 
-## Files
+A fallback model is available if a trained model is not present.
 
-| File | Role |
-|------|------|
-| `.github/workflows/ci-cd.yml` | the pipeline (build → test → **eval gate** → deploy) |
-| `train.py` | trains a small fraud classifier; `DEGRADE=1` makes it fail the gate |
-| `eval_gate.py` | the gate — asserts holdout accuracy ≥ `EVAL_THRESHOLD` |
-| `app/main.py` | FastAPI service: `GET /health`, `POST /predict` (matches your HW4 API) |
-| `tests/test_app.py` | pytest: model loads, `/predict` returns a valid score |
-| `Dockerfile` | container image for the service |
+---
 
-## Bridge to HW4 (optional)
+## Running the System
 
-This lab rehearses real HW4 muscle: the **"Use this template → keep it Public"** flow is exactly how you
-create and submit your HW4 repo; the fraud **`/health` + `/predict`** service is the one HW4 deploys; and the
-**Azure Container Apps** target here *is* **HW4 Part 3**. See **`hw4-bridge/`** for an optional workflow that
-automates your HW4 Part 3 Azure ship (bonus — the required path is still `deploy_azure.sh` in Cloud Shell).
-Today's lab does **not** cover HW4's Kubernetes work (Part 1 — replicas/HPA/probes), and the CI/CD + eval gate
-is a professional add-on, not an HW4 requirement.
+Build and start all containers:
 
-**Capability framing:** GitHub Actions = *CI/CD automation / pipeline-as-code*. Alternatives: Azure DevOps
-Pipelines (managed), GitLab CI, Jenkins (OSS), CML/DVC (ML-specific). Chosen here because you already have GitHub +
-a repo, it's free on hosted runners, and it turns your repo into a real CI/CD-for-ML pipeline with zero Azure spend.
+```bash
+docker compose up --build
+```
+
+The application will be available at:
+
+| Service | URL |
+|---------|-----|
+| API | http://localhost:8000 |
+| Swagger UI | http://localhost:8000/docs |
+| Kafka | localhost:29092 |
+
+---
+
+## API Endpoints
+
+| Endpoint | Description |
+|----------|-------------|
+| `GET /health` | Health check |
+| `GET /model_info` | Model information |
+| `POST /predict` | Predict fraud for a single transaction |
+| `POST /predict_batch` | Predict fraud for multiple transactions |
+
+---
+
+## Running Tests
+
+Execute the automated tests:
+
+```bash
+pytest -q tests/
+```
+
+---
+
+## Performance Testing
+
+Run the performance benchmark:
+
+```bash
+python tests/test_performance.py --n 1000 --url http://localhost:8000
+```
+
+The benchmark reports:
+
+- Throughput (requests/second)
+- p50 latency
+- p95 latency
+- p99 latency
+- Maximum latency
+- Error rate
+
+---
+
+## Blue-Green Deployment
+
+Start the blue-green deployment environment:
+
+```bash
+docker compose -f deployment/docker-compose.blue-green.yml up --build
+```
+
+Switch traffic between the Blue and Green deployments:
+
+```bash
+bash deployment/switch_traffic.sh
+```
+
+The stable endpoint is available at:
+
+```
+http://localhost:8080
+```
+
+---
+
+## Technologies Used
+
+- Python
+- FastAPI
+- Kafka
+- Redis
+- Docker
+- Docker Compose
+- Nginx
+- Pytest
+
+---
+
+## Author
+
+Nicholas Borchich
+
+DATA-789 – Project 2
+
+East Carolina University
